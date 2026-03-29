@@ -1,21 +1,49 @@
 #!/usr/bin/env python3
-"""Random generator — numbers, strings, UUIDs, passwords, dice."""
-import sys, random, string, uuid, hashlib
-def password(length=16):
-    chars = string.ascii_letters + string.digits + "!@#$%&*"
-    return "".join(random.choice(chars) for _ in range(length))
-def passphrase(words=4):
-    w = ["correct","horse","battery","staple","alpha","bravo","charlie","delta","echo","foxtrot","gamma","hotel","india","juliet","kilo","lima","mike","november","oscar","papa","quantum","romeo","sierra","tango","uniform","victor","whiskey","xray","yankee","zulu"]
-    return "-".join(random.choice(w) for _ in range(words))
-def cli():
-    if len(sys.argv) < 2: print("Usage: random_gen int|float|string|uuid|password|passphrase|dice [args]"); sys.exit(1)
-    cmd = sys.argv[1]
-    if cmd == "int": lo, hi = int(sys.argv[2]) if len(sys.argv)>2 else 0, int(sys.argv[3]) if len(sys.argv)>3 else 100; print(random.randint(lo, hi))
-    elif cmd == "float": print(f"{random.uniform(0, float(sys.argv[2]) if len(sys.argv)>2 else 1):.6f}")
-    elif cmd == "string": n = int(sys.argv[2]) if len(sys.argv)>2 else 16; print("".join(random.choices(string.ascii_letters+string.digits, k=n)))
-    elif cmd == "uuid": print(uuid.uuid4())
-    elif cmd == "password": print(password(int(sys.argv[2]) if len(sys.argv)>2 else 16))
-    elif cmd == "passphrase": print(passphrase(int(sys.argv[2]) if len(sys.argv)>2 else 4))
-    elif cmd == "dice": n = int(sys.argv[2]) if len(sys.argv)>2 else 1; s = int(sys.argv[3]) if len(sys.argv)>3 else 6; rolls = [random.randint(1,s) for _ in range(n)]; print(f"  {rolls} = {sum(rolls)}")
-    elif cmd == "hex": print(hashlib.sha256(str(random.random()).encode()).hexdigest()[:int(sys.argv[2]) if len(sys.argv)>2 else 32])
-if __name__ == "__main__": cli()
+"""Random number generators. Zero dependencies."""
+
+class LCG:
+    """Linear Congruential Generator."""
+    def __init__(self, seed=42, a=1664525, c=1013904223, m=2**32):
+        self.state = seed; self.a = a; self.c = c; self.m = m
+    def next_int(self):
+        self.state = (self.a * self.state + self.c) % self.m; return self.state
+    def next_float(self): return self.next_int() / self.m
+    def randint(self, lo, hi): return lo + self.next_int() % (hi - lo + 1)
+    def choice(self, seq): return seq[self.next_int() % len(seq)]
+    def shuffle(self, lst):
+        lst = lst[:]
+        for i in range(len(lst)-1, 0, -1):
+            j = self.next_int() % (i+1)
+            lst[i], lst[j] = lst[j], lst[i]
+        return lst
+    def sample(self, seq, k):
+        pool = list(seq); result = []
+        for _ in range(k):
+            idx = self.next_int() % len(pool)
+            result.append(pool.pop(idx))
+        return result
+
+class XorShift:
+    def __init__(self, seed=42):
+        self.state = seed if seed else 1
+    def next_int(self):
+        x = self.state
+        x ^= (x << 13) & 0xFFFFFFFF
+        x ^= x >> 17
+        x ^= (x << 5) & 0xFFFFFFFF
+        self.state = x & 0xFFFFFFFF
+        return self.state
+    def next_float(self): return self.next_int() / 0xFFFFFFFF
+
+def weighted_choice(items, weights, rng=None):
+    import random
+    r = (rng.next_float() if rng else random.random()) * sum(weights)
+    cumsum = 0
+    for item, w in zip(items, weights):
+        cumsum += w
+        if r <= cumsum: return item
+    return items[-1]
+
+if __name__ == "__main__":
+    rng = LCG(12345)
+    print([rng.next_float() for _ in range(5)])
